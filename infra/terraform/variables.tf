@@ -45,3 +45,45 @@ variable "enable_static_site" {
   type        = bool
   default     = false
 }
+
+variable "enable_custom_domain" {
+  description = "Whether to configure Route 53 + ACM for custom domain on CloudFront."
+  type        = bool
+  default     = false
+}
+
+variable "domain_name" {
+  description = "Root domain name for website and records (for example, jordanamman.ai)."
+  type        = string
+  default     = "jordanamman.ai"
+}
+
+variable "create_public_hosted_zone" {
+  description = "Create a new public Route 53 hosted zone for domain_name."
+  type        = bool
+  default     = false
+}
+
+variable "route53_zone_id" {
+  description = "Existing public Route 53 hosted zone ID. Required when create_public_hosted_zone=false and enable_custom_domain=true."
+  type        = string
+  default     = ""
+}
+
+variable "create_www_record" {
+  description = "Create www alias records for CloudFront."
+  type        = bool
+  default     = true
+}
+
+variable "create_api_record" {
+  description = "Create api subdomain CNAME to API Gateway endpoint."
+  type        = bool
+  default     = true
+}
+
+variable "api_subdomain" {
+  description = "Subdomain label for API record."
+  type        = string
+  default     = "api"
+}

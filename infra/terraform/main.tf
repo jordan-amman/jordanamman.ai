@@ -9,9 +9,27 @@ locals {
     },
     var.common_tags
   )
+
+  hosted_zone_id = var.enable_custom_domain ? (
+    var.create_public_hosted_zone ? aws_route53_zone.public[0].zone_id : data.aws_route53_zone.existing[0].zone_id
+  ) : null
 }
 
 data "aws_caller_identity" "current" {}
+
+resource "aws_route53_zone" "public" {
+  count = var.enable_custom_domain && var.create_public_hosted_zone ? 1 : 0
+
+  name = var.domain_name
+  tags = local.tags
+}
+
+data "aws_route53_zone" "existing" {
+  count = var.enable_custom_domain && !var.create_public_hosted_zone ? 1 : 0
+
+  zone_id      = var.route53_zone_id
+  private_zone = false
+}
 
 data "archive_file" "api_bundle" {
   type        = "zip"
@@ -241,6 +259,9 @@ resource "aws_cloudfront_distribution" "site" {
 
   enabled             = true
   default_root_object = "index.html"
+  aliases = var.enable_custom_domain ? (
+    var.create_www_record ? [var.domain_name, "www.${var.domain_name}"] : [var.domain_name]
+  ) : []
 
   origin {
     domain_name = aws_s3_bucket.site[0].bucket_regional_domain_name
@@ -273,9 +294,131 @@ resource "aws_cloudfront_distribution" "site" {
     }
   }
 
-  viewer_certificate {
-    cloudfront_default_certificate = true
+  dynamic "viewer_certificate" {
+    for_each = var.enable_custom_domain ? [1] : []
+
+    content {
+      acm_certificate_arn      = aws_acm_certificate_validation.site[0].certificate_arn
+      ssl_support_method       = "sni-only"
+      minimum_protocol_version = "TLSv1.2_2021"
+    }
+  }
+
+  dynamic "viewer_certificate" {
+    for_each = var.enable_custom_domain ? [] : [1]
+
+    content {
+      cloudfront_default_certificate = true
+    }
   }
 
   tags = local.tags
+}
+
+resource "aws_acm_certificate" "site" {
+  count    = var.enable_static_site && var.enable_custom_domain ? 1 : 0
+  provider = aws.us_east_1
+
+  domain_name       = var.domain_name
+  validation_method = "DNS"
+  subject_alternative_names = var.create_www_record ? [
+    "www.${var.domain_name}"
+  ] : []
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = local.tags
+}
+
+resource "aws_route53_record" "cert_validation" {
+  for_each = var.enable_static_site && var.enable_custom_domain ? {
+    for dvo in aws_acm_certificate.site[0].domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  } : {}
+
+  allow_overwrite = true
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+  zone_id         = local.hosted_zone_id
+}
+
+resource "aws_acm_certificate_validation" "site" {
+  count    = var.enable_static_site && var.enable_custom_domain ? 1 : 0
+  provider = aws.us_east_1
+
+  certificate_arn         = aws_acm_certificate.site[0].arn
+  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
+}
+
+resource "aws_route53_record" "site_apex_a" {
+  count = var.enable_static_site && var.enable_custom_domain ? 1 : 0
+
+  zone_id = local.hosted_zone_id
+  name    = var.domain_name
+  type    = "A"
+
+  alias {
+    name                   = aws_cloudfront_distribution.site[0].domain_name
+    zone_id                = aws_cloudfront_distribution.site[0].hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "site_apex_aaaa" {
+  count = var.enable_static_site && var.enable_custom_domain ? 1 : 0
+
+  zone_id = local.hosted_zone_id
+  name    = var.domain_name
+  type    = "AAAA"
+
+  alias {
+    name                   = aws_cloudfront_distribution.site[0].domain_name
+    zone_id                = aws_cloudfront_distribution.site[0].hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "site_www_a" {
+  count = var.enable_static_site && var.enable_custom_domain && var.create_www_record ? 1 : 0
+
+  zone_id = local.hosted_zone_id
+  name    = "www.${var.domain_name}"
+  type    = "A"
+
+  alias {
+    name                   = aws_cloudfront_distribution.site[0].domain_name
+    zone_id                = aws_cloudfront_distribution.site[0].hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "site_www_aaaa" {
+  count = var.enable_static_site && var.enable_custom_domain && var.create_www_record ? 1 : 0
+
+  zone_id = local.hosted_zone_id
+  name    = "www.${var.domain_name}"
+  type    = "AAAA"
+
+  alias {
+    name                   = aws_cloudfront_distribution.site[0].domain_name
+    zone_id                = aws_cloudfront_distribution.site[0].hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "api_cname" {
+  count = var.enable_custom_domain && var.create_api_record ? 1 : 0
+
+  zone_id = local.hosted_zone_id
+  name    = "${var.api_subdomain}.${var.domain_name}"
+  type    = "CNAME"
+  ttl     = 300
+  records = [replace(aws_apigatewayv2_api.http_api.api_endpoint, "https://", "")]
 }

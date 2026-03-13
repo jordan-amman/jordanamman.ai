@@ -1,0 +1,18 @@
+# Core stack
+aws_region         = "us-east-1"
+project_name       = "jordanamman-ai"
+environment        = "prod"
+enable_static_site = true
+
+# Custom domain + DNS
+enable_custom_domain      = true
+domain_name               = "jordanamman.ai"
+create_public_hosted_zone = true
+
+# If using an existing Route 53 zone instead, set:
+# create_public_hosted_zone = false
+# route53_zone_id           = "Z1234567890ABC"
+
+create_www_record = true
+create_api_record = true
+api_subdomain     = "api"

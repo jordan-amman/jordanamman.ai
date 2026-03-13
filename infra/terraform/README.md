@@ -33,6 +33,7 @@ terraform init -reconfigure -backend-config=backend.hcl
 - Lambda functions (`health`, `contact`)
 - DynamoDB on-demand table (contact requests)
 - Optional static site stack (S3 + CloudFront)
+- Optional custom domain stack (Route 53 + ACM in `us-east-1`)
 
 ## Prereqs
 
@@ -51,6 +52,15 @@ terraform plan
 terraform apply
 ```
 
+Custom domain deployment example:
+
+```bash
+copy terraform.tfvars.example terraform.tfvars
+# edit placeholders
+terraform plan -var-file=terraform.tfvars
+terraform apply -var-file=terraform.tfvars
+```
+
 If remote state is configured, always run init with backend config once per clone or config change:
 
 ```bash
@@ -63,6 +73,32 @@ Enable static site resources:
 terraform plan -var enable_static_site=true
 terraform apply -var enable_static_site=true
 ```
+
+## Custom Domain Notes
+
+- CloudFront requires ACM certificates in `us-east-1`.
+- This stack provisions ACM in `us-east-1` via provider alias when `enable_custom_domain=true` and `enable_static_site=true`.
+- If `create_public_hosted_zone=true`, Terraform creates the Route 53 zone and outputs name servers.
+- If you already have a zone, set `create_public_hosted_zone=false` and provide `route53_zone_id`.
+
+### DNS Records Created By Terraform
+
+When enabled, Terraform creates:
+
+- `A` alias: `jordanamman.ai` -> CloudFront
+- `AAAA` alias: `jordanamman.ai` -> CloudFront
+- `A` alias: `www.jordanamman.ai` -> CloudFront (if `create_www_record=true`)
+- `AAAA` alias: `www.jordanamman.ai` -> CloudFront (if `create_www_record=true`)
+- `CNAME`: `api.jordanamman.ai` -> API Gateway endpoint (if `create_api_record=true`)
+
+### Squarespace -> Route 53 Nameserver Cutover
+
+If the domain is registered at Squarespace and the hosted zone is in Route 53:
+
+1. Create/apply Terraform with `create_public_hosted_zone=true`.
+2. Copy `hosted_zone_name_servers` output values.
+3. Update nameservers in Squarespace to those Route 53 NS values.
+4. Wait for DNS propagation, then verify records resolve.
 
 ## Cost Notes
 
