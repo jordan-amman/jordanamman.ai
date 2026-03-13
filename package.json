@@ -1,0 +1,20 @@
+{
+  "name": "jordanamman-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI systems portfolio and experiments for jordanamman.ai",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @jordan/web",
+    "build:web": "npm run build --workspace @jordan/web",
+    "lint:web": "npm run lint --workspace @jordan/web",
+    "build:api": "npm run build --workspace @jordan/api",
+    "typecheck": "npm run typecheck --workspace @jordan/web && npm run typecheck --workspace @jordan/api"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
