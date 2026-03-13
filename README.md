@@ -85,6 +85,25 @@ terraform apply
 
 Use `-var enable_static_site=true` when you want Terraform to also provision S3 + CloudFront for static hosting.
 
+## CI/CD
+
+GitHub Actions workflow is configured at `.github/workflows/ci.yml` and runs:
+
+- gitleaks secret scan
+- Node install + typecheck + web build + API build
+- Terraform `fmt`, `init -backend=false`, and `validate` for both infra stacks
+
+Why this is the default now:
+
+- Public repo means GitHub Actions is typically free for this workflow shape
+- Faster setup and easier contributor visibility than full CodeBuild/CodePipeline upfront
+
+When to consider AWS CodeBuild/CodePipeline later:
+
+- strict AWS IAM-only control plane requirements
+- private networking and VPC-bound build execution
+- centralized enterprise compliance controls in AWS
+
 ## Deployment Direction (Cost-First)
 
 - Frontend: Next.js static export or ISR via CloudFront + S3
