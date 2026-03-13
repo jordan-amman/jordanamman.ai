@@ -42,7 +42,7 @@ npm install
 npm run dev:web
 ```
 
-Local app URL: `http://localhost:3000` (or next available port).
+Local app URL: `http://localhost:3001`.
 
 3. Build the Lambda API package:
 
