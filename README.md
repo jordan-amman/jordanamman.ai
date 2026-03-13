@@ -104,6 +104,31 @@ When to consider AWS CodeBuild/CodePipeline later:
 - private networking and VPC-bound build execution
 - centralized enterprise compliance controls in AWS
 
+## Secret Scanning
+
+Current protection layers:
+
+- CI scan on `push` and `pull_request` via gitleaks in GitHub Actions
+- Local pre-commit scan (optional but recommended)
+
+Enable local pre-commit hook:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Install local gitleaks binary (Windows):
+
+```bash
+winget install Gitleaks.Gitleaks
+```
+
+Run manual secret scan anytime:
+
+```bash
+npm run scan:secrets
+```
+
 ## Deployment Direction (Cost-First)
 
 - Frontend: Next.js static export or ISR via CloudFront + S3
