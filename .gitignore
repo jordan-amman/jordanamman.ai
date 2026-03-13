@@ -29,6 +29,7 @@ crash.log
 *.tfvars.json
 .terraform.tfstate.lock.info
 infra/terraform/.artifacts/
+infra/terraform/backend.hcl
 
 # IDE
 .vscode/
