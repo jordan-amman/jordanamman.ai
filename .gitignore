@@ -19,6 +19,7 @@ pnpm-debug.log*
 # builds
 dist/
 coverage/
+*.tsbuildinfo
 
 # terraform
 .terraform/
