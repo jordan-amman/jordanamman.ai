@@ -1,5 +1,19 @@
+import Image from "next/image";
 import { engagementTypes, faqs, services } from "../../content/site";
 import ContactForm from "../../components/ContactForm";
+
+const certifications = [
+  {
+    src: "/images/certs/aws-certified-cloud-practitioner.png",
+    alt: "AWS Certified Cloud Practitioner",
+    label: "AWS Certified Cloud Practitioner"
+  },
+  {
+    src: "/images/certs/aws-certified-solutions-architect-associate.png",
+    alt: "AWS Certified Solutions Architect – Associate",
+    label: "AWS Certified Solutions Architect – Associate"
+  }
+];
 
 const workTypeOptions = [
   { value: "consulting", label: "Consulting" },
@@ -53,6 +67,38 @@ export default function WorkWithMePage() {
               <li>Organizations improving reliability and observability</li>
             </ul>
           </article>
+        </div>
+      </section>
+
+      <section className="section">
+        <p className="eyebrow">Certifications</p>
+        <h2>AWS credentials backing the architecture and delivery work</h2>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "2rem",
+            alignItems: "center",
+            marginTop: "1.5rem"
+          }}
+        >
+          {certifications.map((cert) => (
+            <div
+              key={cert.src}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.6rem" }}
+            >
+              <Image
+                src={cert.src}
+                alt={cert.alt}
+                width={150}
+                height={150}
+                style={{ objectFit: "contain" }}
+              />
+              <span style={{ fontSize: "0.85rem", opacity: 0.75, textAlign: "center", maxWidth: "160px" }}>
+                {cert.label}
+              </span>
+            </div>
+          ))}
         </div>
       </section>
 
