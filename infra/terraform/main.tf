@@ -13,6 +13,28 @@ locals {
   hosted_zone_id = var.enable_custom_domain ? (
     var.create_public_hosted_zone ? aws_route53_zone.public[0].zone_id : data.aws_route53_zone.existing[0].zone_id
   ) : null
+
+  site_build_dir = abspath("${path.module}/${var.site_build_dir}")
+  site_files     = var.enable_static_site ? fileset(local.site_build_dir, "**") : []
+
+  mime_types = {
+    css   = "text/css; charset=utf-8"
+    gif   = "image/gif"
+    html  = "text/html; charset=utf-8"
+    ico   = "image/x-icon"
+    jpeg  = "image/jpeg"
+    jpg   = "image/jpeg"
+    js    = "application/javascript; charset=utf-8"
+    json  = "application/json; charset=utf-8"
+    map   = "application/json; charset=utf-8"
+    png   = "image/png"
+    svg   = "image/svg+xml"
+    txt   = "text/plain; charset=utf-8"
+    webp  = "image/webp"
+    woff  = "font/woff"
+    woff2 = "font/woff2"
+    xml   = "application/xml; charset=utf-8"
+  }
 }
 
 data "aws_caller_identity" "current" {}
@@ -98,6 +120,14 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "dynamodb:GetItem"
         ]
         Resource = aws_dynamodb_table.contact_requests.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ses:SendEmail",
+          "ses:SendRawEmail"
+        ]
+        Resource = "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.domain_name}"
       }
     ]
   })
@@ -135,6 +165,8 @@ resource "aws_lambda_function" "contact" {
   environment {
     variables = {
       CONTACT_TABLE_NAME = aws_dynamodb_table.contact_requests.name
+      SES_FROM_EMAIL     = "hello@${var.domain_name}"
+      NOTIFICATION_EMAIL = "hello@${var.domain_name}"
     }
   }
 
@@ -234,6 +266,37 @@ resource "aws_cloudfront_origin_access_identity" "site" {
   comment = "${local.name_prefix}-oai"
 }
 
+resource "aws_cloudfront_function" "site_rewrite" {
+  count   = var.enable_static_site ? 1 : 0
+  name    = "${local.name_prefix}-site-rewrite"
+  runtime = "cloudfront-js-1.0"
+  publish = true
+  comment = "Rewrite clean URLs to exported index.html assets."
+
+  code = <<-EOF
+  function handler(event) {
+    var request = event.request;
+    var uri = request.uri;
+
+    if (uri === "/") {
+      request.uri = "/index.html";
+      return request;
+    }
+
+    if (uri.endsWith("/")) {
+      request.uri += "index.html";
+      return request;
+    }
+
+    if (!uri.includes(".")) {
+      request.uri += "/index.html";
+    }
+
+    return request;
+  }
+  EOF
+}
+
 data "aws_iam_policy_document" "site_bucket_policy" {
   count = var.enable_static_site ? 1 : 0
 
@@ -252,6 +315,22 @@ resource "aws_s3_bucket_policy" "site" {
   count  = var.enable_static_site ? 1 : 0
   bucket = aws_s3_bucket.site[0].id
   policy = data.aws_iam_policy_document.site_bucket_policy[0].json
+}
+
+resource "aws_s3_object" "site_assets" {
+  for_each = var.enable_static_site ? { for file in local.site_files : file => file } : {}
+
+  bucket = aws_s3_bucket.site[0].id
+  key    = each.value
+  source = "${local.site_build_dir}/${each.value}"
+  etag   = filemd5("${local.site_build_dir}/${each.value}")
+
+  content_type = lookup(local.mime_types, lower(element(reverse(split(".", each.value)), 0)), null)
+  cache_control = endswith(each.value, ".html") ? "public, max-age=0, must-revalidate" : (
+    startswith(each.value, "_next/") ? "public, max-age=31536000, immutable" : "public, max-age=86400"
+  )
+
+  depends_on = [aws_s3_bucket_public_access_block.site]
 }
 
 resource "aws_cloudfront_distribution" "site" {
@@ -278,6 +357,14 @@ resource "aws_cloudfront_distribution" "site" {
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
     compress               = true
+    min_ttl                = 0
+    default_ttl            = 3600
+    max_ttl                = 31536000
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.site_rewrite[0].arn
+    }
 
     forwarded_values {
       query_string = false
@@ -292,6 +379,20 @@ resource "aws_cloudfront_distribution" "site" {
     geo_restriction {
       restriction_type = "none"
     }
+  }
+
+  custom_error_response {
+    error_code            = 403
+    response_code         = 404
+    response_page_path    = "/404.html"
+    error_caching_min_ttl = 0
+  }
+
+  custom_error_response {
+    error_code            = 404
+    response_code         = 404
+    response_page_path    = "/404.html"
+    error_caching_min_ttl = 0
   }
 
   dynamic "viewer_certificate" {
@@ -313,6 +414,8 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   tags = local.tags
+
+  depends_on = [aws_s3_object.site_assets]
 }
 
 resource "aws_acm_certificate" "site" {
@@ -418,7 +521,66 @@ resource "aws_route53_record" "api_cname" {
 
   zone_id = local.hosted_zone_id
   name    = "${var.api_subdomain}.${var.domain_name}"
-  type    = "CNAME"
-  ttl     = 300
-  records = [replace(aws_apigatewayv2_api.http_api.api_endpoint, "https://", "")]
+  type    = "A"
+
+  alias {
+    name                   = aws_apigatewayv2_domain_name.api[0].domain_name_configuration[0].target_domain_name
+    zone_id                = aws_apigatewayv2_domain_name.api[0].domain_name_configuration[0].hosted_zone_id
+    evaluate_target_health = false
+  }
 }
+
+# ── API Gateway custom domain (proper TLS for api.jordanamman.ai) ──────────────
+
+resource "aws_acm_certificate" "api" {
+  count             = var.enable_custom_domain && var.create_api_record ? 1 : 0
+  domain_name       = "${var.api_subdomain}.${var.domain_name}"
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_route53_record" "api_cert_validation" {
+  for_each = var.enable_custom_domain && var.create_api_record ? {
+    for dvo in aws_acm_certificate.api[0].domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  } : {}
+
+  zone_id = local.hosted_zone_id
+  name    = each.value.name
+  type    = each.value.type
+  ttl     = 60
+  records = [each.value.record]
+}
+
+resource "aws_acm_certificate_validation" "api" {
+  count                   = var.enable_custom_domain && var.create_api_record ? 1 : 0
+  certificate_arn         = aws_acm_certificate.api[0].arn
+  validation_record_fqdns = [for record in aws_route53_record.api_cert_validation : record.fqdn]
+}
+
+resource "aws_apigatewayv2_domain_name" "api" {
+  count       = var.enable_custom_domain && var.create_api_record ? 1 : 0
+  domain_name = "${var.api_subdomain}.${var.domain_name}"
+
+  domain_name_configuration {
+    certificate_arn = aws_acm_certificate_validation.api[0].certificate_arn
+    endpoint_type   = "REGIONAL"
+    security_policy = "TLS_1_2"
+  }
+
+  tags = local.tags
+}
+
+resource "aws_apigatewayv2_api_mapping" "api" {
+  count       = var.enable_custom_domain && var.create_api_record ? 1 : 0
+  api_id      = aws_apigatewayv2_api.http_api.id
+  domain_name = aws_apigatewayv2_domain_name.api[0].id
+  stage       = aws_apigatewayv2_stage.default.id
+}
+

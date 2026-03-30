@@ -40,6 +40,12 @@ variable "api_bundle_source_dir" {
   default     = "../../apps/api/dist"
 }
 
+variable "site_build_dir" {
+  description = "Path to the exported static site directory, relative to this module."
+  type        = string
+  default     = "../../apps/web/out"
+}
+
 variable "enable_static_site" {
   description = "Whether to deploy S3 + CloudFront static site resources."
   type        = bool

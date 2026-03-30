@@ -4,7 +4,7 @@ Terraform is the single source of truth for AWS infrastructure in this repo.
 
 ## Remote State (Recommended)
 
-1. Bootstrap a state bucket + lock table:
+1. Bootstrap an S3 state bucket:
 
 ```bash
 cd ../state-bootstrap
@@ -12,16 +12,23 @@ terraform init
 terraform apply -var state_bucket_name="YOUR_UNIQUE_BUCKET_NAME"
 ```
 
-2. Create a backend config from example:
+2. Create or update `backend.hcl` in `infra/terraform`:
 
 ```bash
 cd ../terraform
-copy backend.hcl.example backend.hcl
+copy con backend.hcl
 ```
 
-3. Edit `backend.hcl` with your bucket/table values.
+Paste values like:
 
-4. Initialize infra stack with remote state:
+```hcl
+bucket  = "YOUR_UNIQUE_BUCKET_NAME"
+key     = "jordanamman-ai/prod/terraform.tfstate"
+region  = "us-east-1"
+encrypt = true
+```
+
+3. Initialize infra stack with remote state:
 
 ```bash
 terraform init -reconfigure -backend-config=backend.hcl
@@ -40,12 +47,14 @@ terraform init -reconfigure -backend-config=backend.hcl
 - Terraform `>= 1.6`
 - AWS credentials configured in your shell
 - Built API bundle (`apps/api/dist`)
+- Built static site export (`apps/web/out`) when `enable_static_site=true`
 
 ## Deploy
 
 ```bash
 cd ../../
 npm run build:api
+npm run build:web
 cd infra/terraform
 terraform init
 terraform plan
@@ -56,7 +65,7 @@ Custom domain deployment example:
 
 ```bash
 copy terraform.tfvars.example terraform.tfvars
-# edit placeholders
+# edit placeholders, especially route53_zone_id if the hosted zone already exists
 terraform plan -var-file=terraform.tfvars
 terraform apply -var-file=terraform.tfvars
 ```
@@ -70,9 +79,30 @@ terraform init -reconfigure -backend-config=backend.hcl
 Enable static site resources:
 
 ```bash
+cd ../../
+npm run build:web
+cd infra/terraform
 terraform plan -var enable_static_site=true
 terraform apply -var enable_static_site=true
 ```
+
+For an existing Route 53 hosted zone such as `jordanamman.ai`, use:
+
+```hcl
+enable_static_site        = true
+enable_custom_domain      = true
+create_public_hosted_zone = false
+route53_zone_id           = "Z1234567890ABC"
+domain_name               = "jordanamman.ai"
+```
+
+Terraform will then:
+
+- Request and validate the ACM certificate in `us-east-1`
+- Create the CloudFront distribution
+- Upload the static export from `apps/web/out` into S3
+- Create apex and `www` Route 53 alias records to CloudFront
+- Optionally create `api.jordanamman.ai` for the HTTP API
 
 ## Custom Domain Notes
 
@@ -95,10 +125,9 @@ When enabled, Terraform creates:
 
 If the domain is registered at Squarespace and the hosted zone is in Route 53:
 
-1. Create/apply Terraform with `create_public_hosted_zone=true`.
-2. Copy `hosted_zone_name_servers` output values.
-3. Update nameservers in Squarespace to those Route 53 NS values.
-4. Wait for DNS propagation, then verify records resolve.
+1. If the hosted zone already exists in Route 53, keep `create_public_hosted_zone=false` and do not create a second zone.
+2. In the registrar, confirm the domain uses the four Route 53 name servers shown on that hosted zone.
+3. Wait for DNS propagation, then verify records resolve.
 
 ## Cost Notes
 
