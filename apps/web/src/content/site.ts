@@ -16,6 +16,7 @@ export type ProjectItem = {
   challenges: string[];
   results: string[];
   nextSteps: string[];
+  diagramUrl?: string;
   demos?: Array<{
     title: string;
     description: string;
@@ -329,73 +330,6 @@ export const architectureNotes = [
       "Cost allocation and chargeback models for shared infrastructure"
     ]
   },
-{
-  "slug": "one-gpu-three-blogs-five-social",
-  "title": "One GPU, Three Blogs, Five Social Accounts: The Self-Hosted AI Content Engine I Run in Production for $5 a Month",
-  "summary": "Local LLM and image generation on one RTX 5090, publishing across three brands and five social accounts for about $5/month \u2014 with a human gate on every post",
-  "tags": [
-    "system-architecture",
-    "local-inference",
-    "human-in-the-loop",
-    "mlops"
-  ],
-  "context": "A self-hosted AI content pipeline that generates, illustrates, and publishes content across three brands and five social accounts without metered API costs",
-  "goal": "Create a production-ready content pipeline with zero marginal cost for content generation, using local inference and human approval gates",
-  "components": [
-    "Content generation: Local Ollama (qwen3:30b, upgraded from llama3.1:8b) writing articles and platform-specific spinoffs",
-    "Image generation: ComfyUI + Flux.1-schnell on RTX 5090 for background art + PIL compositing for text",
-    "Approval: Discord webhook + FastAPI server handling Approve/Reject via DynamoDB",
-    "Routing: Pillar-based brand mapping with brand-scoped social account selection",
-    "Publishing: Three different deploy paths (git push, Terraform apply, direct DB write)",
-    "Social distribution: Self-hosted Postiz using Meta Graph API for brand-scoped social accounts"
-  ],
-  "decisions": [
-    "Use local inference (Ollama, ComfyUI) instead of metered APIs to eliminate marginal cost",
-    "Implement human approval gate before any public publication",
-    "Route content via pillar mapping (e.g., 'aws_architecture' \u2192 jordanamman.dev)",
-    "Brand-scoped credential handling prevents content leakage between brands",
-    "Validate model outputs against schemas to handle small model failure modes"
-  ],
-  "tradeoffs": [
-    "Increased validation code to handle small model reliability issues",
-    "Slower generation times (6-90s) vs. cloud APIs but zero cost per call",
-    "Local hosting requires managing infrastructure (DynamoDB, S3, Terraform)",
-    "Brand-specific deploy paths require more code to handle different workflows"
-  ],
-  "stack": [
-    "Ollama (llama3.1:8b) for text generation",
-    "ComfyUI + Flux.1-schnell (fp8) for image generation",
-    "Discord webhook for approval workflow",
-    "FastAPI server for approval handling",
-    "DynamoDB for drafts/approvals/storage",
-    "S3 for public media storage",
-    "Postiz for social distribution",
-    "Terraform for infra-as-code"
-  ],
-  "considerations": [
-    "Validate structured model outputs against schemas to prevent routing errors",
-    "Handle credential scoping to avoid brand content leakage",
-    "Design missing integrations to fail closed and report (skip + log), never to silently post through a different brand's account",
-    "Test external system fetches (e.g., Meta's media fetch) before production deployment"
-  ],
-  "whenToUse": [
-    "When content volume is high enough to make metered API costs prohibitive",
-    "When you own the hardware and want to avoid API billing",
-    "When you need a human gate before public publication"
-  ],
-  "whenToAvoid": [
-    "When you need low-latency generation (cloud APIs are faster)",
-    "When you don't own the hardware (cloud API is cheaper)",
-    "When brand-scoped publish paths are unnecessary"
-  ],
-  "furtherReading": [
-    "Ollama structured outputs (JSON mode) and validating small-model responses",
-    "Flux.1-schnell: distilled diffusion for low-step local image generation",
-    "Postiz documentation for self-hosted social scheduling",
-    "Terraform state management with an S3 backend"
-  ],
-  "diagramUrl": "https://jordan-content-engine-prod-media.s3.us-east-1.amazonaws.com/postiz/dea375d1-2faf-4d05-80cc-19122b54236b-diagram_pipeline_3354da4d.png"
-}
 ];
 
 export const metrics = [
@@ -433,6 +367,60 @@ export const services = [
 ];
 
 export const projects: ProjectItem[] = [
+  {
+    slug: "self-hosted-ai-content-engine",
+    title: "Self-Hosted AI Content Engine",
+    value:
+      "One GPU runs local text and image generation that writes, illustrates, and publishes content across three brand blogs and five social accounts — for about $5/month, with a human gate on every post.",
+    status: "Shipped",
+    stack: ["Ollama (Qwen3 30B)", "ComfyUI + Flux", "Python", "DynamoDB", "S3", "Terraform", "Postiz"],
+    summary:
+      "Production content pipeline running entirely on an RTX 5090: local LLM article generation, local diffusion imagery with deterministic typography, Discord-based human approval, and per-brand routing to three blogs and five social accounts.",
+    outcome:
+      "Live in production publishing daily-capable content to three brands with zero per-call generation cost and roughly $2-5/month of total cloud spend.",
+    problem:
+      "Publishing consistently across multiple brands means either paying metered API costs that scale with usage, or manual effort that doesn't scale at all — and autonomous posting without review risks putting a bad generation on a public account.",
+    goal:
+      "Zero marginal cost per post: generate everything locally on owned hardware, route each piece to exactly one brand's blog and social accounts, and gate every publish behind a human approval click.",
+    architecture: [
+      "Local Ollama (Qwen3 30B, upgraded from llama3.1:8b) generates articles and platform-specific variants in JSON mode with schema validation",
+      "ComfyUI + Flux.1-schnell generates background art; a PIL compositing layer renders real typography, pillar-colored accents, and contrast-aware brand marks",
+      "A routing layer maps each content pillar to one brand, and each brand to its own scoped social accounts — never falling back across brands",
+      "Discord approval gate: every draft posts as an embed with Approve/Reject/Preview; a FastAPI service records the decision in DynamoDB and nothing publishes without it",
+      "Three deploy paths, one per brand: git push into CodeBuild/S3/CloudFront, local terraform apply that uploads a static build, and direct writes to a live DynamoDB-backed API",
+      "Self-hosted Postiz distributes approved posts to Instagram, Facebook, and LinkedIn via each platform's API, using media pre-uploaded to a public S3 bucket"
+    ],
+    features: [
+      "Per-brand marketing pipelines with strict account isolation (no cross-brand credential fallback)",
+      "Permanent post history in DynamoDB with feedback-driven iteration that republishes to the same URL",
+      "Per-platform content: long-form LinkedIn posts with an architecture diagram, caption-style posts with branded title cards elsewhere",
+      "Automatic CloudFront invalidation after each brand deploy completes",
+      "Architecture diagrams rendered from code (Python diagrams + Graphviz) so published diagrams match the real system"
+    ],
+    tradeoffs: [
+      "Local small-model generation is free but needs a validation layer — JSON mode constrains syntax, not semantics, so every structured field is checked against its schema",
+      "Owned-GPU inference inverts the cost curve (zero marginal cost per post) at the price of managing local infrastructure instead of calling a metered API",
+      "A human approval gate caps full autonomy by design — ten seconds of review per post versus the reputational cost of one bad autonomous publish"
+    ],
+    challenges: [
+      "First Instagram publish failed with 'media fetch failed': the scheduler served images from localhost, which Meta's servers can't reach — fixed by pre-uploading all media to a public S3 bucket",
+      "Small local models sometimes echo an entire enum list instead of picking one value — solved with schema validation and preferring curated values over generated ones",
+      "Small models also collapse output length on revision tasks — flagship long-form content is drafted by a stronger model and published verbatim, bypassing the local rewrite step"
+    ],
+    results: [
+      "Three brands live from one approval flow: blog update + Instagram + Facebook on one brand, blog post + LinkedIn + personal socials on another, structured case study on the third",
+      "Total running cost ~$2-5/month (DynamoDB + S3); generation cost $0 on owned hardware",
+      "Every post permanently tracked and iterable: feedback in, improved revision out, same URL republished"
+    ],
+    nextSteps: [
+      "Wire the Remotion video pipeline (already rendering) into the daily flow for TikTok/YouTube Shorts",
+      "Connect dedicated TikTok and YouTube business accounts for the education brand",
+      "Add the next isolated brand pipeline (contracting company) to prove the multi-tenant routing design",
+      "Schedule fully automated daily runs with the human gate as the only manual step"
+    ],
+    diagramUrl:
+      "https://jordan-content-engine-prod-media.s3.us-east-1.amazonaws.com/postiz/dea375d1-2faf-4d05-80cc-19122b54236b-diagram_pipeline_3354da4d.png"
+  },
   {
     slug: "animated-metahumans-audio2face",
     title: "Animated Metahumans (NVIDIA Audio2Face)",

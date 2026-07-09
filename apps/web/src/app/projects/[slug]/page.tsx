@@ -51,6 +51,16 @@ export default function ProjectDetailPage({ params }: ProjectDetailProps) {
       <section className="section">
         <p className="eyebrow">Architecture Overview</p>
         <h2>System shape and flow</h2>
+        {project.diagramUrl && (
+          <article className="card" style={{ marginTop: "1rem" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={project.diagramUrl}
+              alt={`Architecture diagram: ${project.title}`}
+              style={{ width: "100%", height: "auto", borderRadius: "8px" }}
+            />
+          </article>
+        )}
         <article className="card" style={{ marginTop: "1rem" }}>
           <ul className="list-clean">
             {project.architecture.map((item) => (
