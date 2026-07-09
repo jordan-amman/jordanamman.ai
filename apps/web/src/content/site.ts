@@ -328,7 +328,74 @@ export const architectureNotes = [
       "Serverless architecture economics",
       "Cost allocation and chargeback models for shared infrastructure"
     ]
-  }
+  },
+{
+  "slug": "one-gpu-three-blogs-five-social",
+  "title": "One GPU, Three Blogs, Five Social Accounts: The Self-Hosted AI Content Engine I Run in Production for $5 a Month",
+  "summary": "Local LLM and image generation on one RTX 5090, publishing across three brands and five social accounts for about $5/month \u2014 with a human gate on every post",
+  "tags": [
+    "system-architecture",
+    "local-inference",
+    "human-in-the-loop",
+    "mlops"
+  ],
+  "context": "A self-hosted AI content pipeline that generates, illustrates, and publishes content across three brands and five social accounts without metered API costs",
+  "goal": "Create a production-ready content pipeline with zero marginal cost for content generation, using local inference and human approval gates",
+  "components": [
+    "Content generation: Local Ollama (qwen3:30b, upgraded from llama3.1:8b) writing articles and platform-specific spinoffs",
+    "Image generation: ComfyUI + Flux.1-schnell on RTX 5090 for background art + PIL compositing for text",
+    "Approval: Discord webhook + FastAPI server handling Approve/Reject via DynamoDB",
+    "Routing: Pillar-based brand mapping with brand-scoped social account selection",
+    "Publishing: Three different deploy paths (git push, Terraform apply, direct DB write)",
+    "Social distribution: Self-hosted Postiz using Meta Graph API for brand-scoped social accounts"
+  ],
+  "decisions": [
+    "Use local inference (Ollama, ComfyUI) instead of metered APIs to eliminate marginal cost",
+    "Implement human approval gate before any public publication",
+    "Route content via pillar mapping (e.g., 'aws_architecture' \u2192 jordanamman.dev)",
+    "Brand-scoped credential handling prevents content leakage between brands",
+    "Validate model outputs against schemas to handle small model failure modes"
+  ],
+  "tradeoffs": [
+    "Increased validation code to handle small model reliability issues",
+    "Slower generation times (6-90s) vs. cloud APIs but zero cost per call",
+    "Local hosting requires managing infrastructure (DynamoDB, S3, Terraform)",
+    "Brand-specific deploy paths require more code to handle different workflows"
+  ],
+  "stack": [
+    "Ollama (llama3.1:8b) for text generation",
+    "ComfyUI + Flux.1-schnell (fp8) for image generation",
+    "Discord webhook for approval workflow",
+    "FastAPI server for approval handling",
+    "DynamoDB for drafts/approvals/storage",
+    "S3 for public media storage",
+    "Postiz for social distribution",
+    "Terraform for infra-as-code"
+  ],
+  "considerations": [
+    "Validate structured model outputs against schemas to prevent routing errors",
+    "Handle credential scoping to avoid brand content leakage",
+    "Design missing integrations to fail closed and report (skip + log), never to silently post through a different brand's account",
+    "Test external system fetches (e.g., Meta's media fetch) before production deployment"
+  ],
+  "whenToUse": [
+    "When content volume is high enough to make metered API costs prohibitive",
+    "When you own the hardware and want to avoid API billing",
+    "When you need a human gate before public publication"
+  ],
+  "whenToAvoid": [
+    "When you need low-latency generation (cloud APIs are faster)",
+    "When you don't own the hardware (cloud API is cheaper)",
+    "When brand-scoped publish paths are unnecessary"
+  ],
+  "furtherReading": [
+    "Ollama structured outputs (JSON mode) and validating small-model responses",
+    "Flux.1-schnell: distilled diffusion for low-step local image generation",
+    "Postiz documentation for self-hosted social scheduling",
+    "Terraform state management with an S3 backend"
+  ],
+  "diagramUrl": "https://jordan-content-engine-prod-media.s3.us-east-1.amazonaws.com/postiz/dea375d1-2faf-4d05-80cc-19122b54236b-diagram_pipeline_3354da4d.png"
+}
 ];
 
 export const metrics = [
