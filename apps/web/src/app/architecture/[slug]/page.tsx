@@ -51,6 +51,16 @@ export default function ArchitectureDetailPage({ params }: ArchitectureDetailPro
       <section className="section">
         <p className="eyebrow">Architecture Overview</p>
         <h2>System design and patterns</h2>
+        {"diagramUrl" in note && typeof note.diagramUrl === "string" && (
+          <article className="card" style={{ marginTop: "1rem" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={note.diagramUrl}
+              alt={`Architecture diagram: ${note.title}`}
+              style={{ width: "100%", height: "auto", borderRadius: "8px" }}
+            />
+          </article>
+        )}
         <article className="card" style={{ marginTop: "1rem" }}>
           <ul className="list-clean">
             {note.components?.map((item) => (
